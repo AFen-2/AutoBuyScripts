@@ -1,0 +1,66 @@
+name: AutoBuy Script Runner
+
+on:
+  schedule:
+    # 每5分钟运行一次（根据你的需求调整）
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # 允许手动触发
+    inputs:
+      product_url:
+        description: '商品URL'
+        required: false
+
+jobs:
+  run-autobuy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        # 安装脚本可能需要的其他依赖
+        pip install requests selenium beautifulsoup4
+        
+    - name: Set up Chrome for Selenium
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget unzip
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
+        
+    - name: Run AutoBuy script
+      env:
+        # 从GitHub Secrets获取敏感信息
+        USERNAME: ${{ secrets.AUTOBUY_USERNAME }}
+        PASSWORD: ${{ secrets.AUTOBUY_PASSWORD }}
+        PRODUCT_URL: ${{ github.event.inputs.product_url || secrets.DEFAULT_PRODUCT_URL }}
+      run: |
+        # 运行你的主脚本
+        python main.py --username "$USERNAME" --password "$PASSWORD" --url "$PRODUCT_URL"
+        # 或者根据你的脚本结构调整
+        
+    - name: Send notification on success
+      if: success()
+      uses: rtCamp/action-slack-notify@v2
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        SLACK_MESSAGE: '✅ AutoBuy script executed successfully!'
+        
+    - name: Send notification on failure
+      if: failure()
+      uses: rtCamp/action-slack-notify@v2
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        SLACK_MESSAGE: '❌ AutoBuy script failed!'
+        SLACK_COLOR: 'danger'
